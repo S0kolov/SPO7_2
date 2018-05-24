@@ -92,6 +92,10 @@ string get_file_inf(char * buf, vector<fileInf*> * vec);
 
 void move_all_files(int offset, int size, int i);
 
+void cheack_and_clear_header();
+
+void delete_ziro_element();
+
 int main() {
     create_file(MAGIC);
     hFile = fopen("disk_SOK.txt","a+");
@@ -155,8 +159,18 @@ void defragmintaiton() {
 }
 
 void move_all_files(int offset, int size, int i) {
-    int s = header.size();
+    int s = header.size() - 1;
+    int base = HEADER_SIZE * block;
+    do{
+        if(header[s]->stat == FREE){
+            continue;
+        }else{
 
+        }
+        if(s == 0) {
+            break;
+        }
+    }while(true);
 }
 
 
@@ -268,11 +282,46 @@ void delete_file(int res) {
             if(file->nextId== 0){
                 break;
             }else{
+                file->nextId = 0;
                 file = find_file(file->nextId);
             }
         }while(true);
 
     }
+    cheack_and_clear_header();
+}
+
+void cheack_and_clear_header() {
+    int count = header.size() ;
+    int i = 0;
+    do{
+        if(header[i]->stat == FREE && header[i+1]->stat== FREE){
+            header[i]->size += header[i+1]->size;
+            header[i+1]->size = 0;
+            delete_ziro_element();
+        }else{
+            i++;
+            if(i == count){
+                break;
+            }else{
+                continue;
+            }
+        }
+    }while(true);
+}
+
+void delete_ziro_element() {
+    vector<fileInf*> temp;
+    int i = 0;
+    do{
+        if(header[i]->size != 0){
+            temp.push_back(header[i]);
+        }else{
+            i++;
+            continue;
+        }
+    }while(i == header.size());
+    header = temp;
 }
 
 fileInf *find_file(unsigned int id) {
