@@ -9,6 +9,8 @@ using namespace std;
 
 #define DEVIDER 4
 #define MAGIC 32
+#define CHEAK_FILE_HEAD false
+#define PRINTF_ONLI_HEAD true
 
 enum status { BUSY , FREE , BUSY_HEAD};
 
@@ -64,7 +66,7 @@ int printf_menu();
 
 bool make_magic(int i);
 
-void create_new_file(int id = 0);
+void create_new_file(string str = "");
 
 string enter_file_inf();
 
@@ -72,15 +74,15 @@ bool enought_space(unsigned int size);
 
 fileInf * find_free_pos(int *size);
 
-void printf_file_description_hader();
+void printf_file_description_hader(bool f = false);
 
 void delete_file(int res = 0);
 
-fileInf *find_file(unsigned int id);
+fileInf *find_file(unsigned int id, bool fl = true);
 
 void see_file_inf(int res = 0);
 
-vector<fileInf *> get_ful_file(int res);
+vector<fileInf *> get_full_file(int res);
 
 void refresh_file_inf();
 
@@ -90,21 +92,28 @@ int get_ful_file_size(vector<fileInf *> * vec);
 
 string get_file_inf(char * buf, vector<fileInf*> * vec);
 
-void move_all_files(int offset, int size, int i);
+int move_all_files(int offset, int size, int i);
 
 void cheack_and_clear_header();
 
 void delete_ziro_element();
 
+void push(vector<fileInf *> vec);
+
+vector<fileInf *> find_secret_and_do_magic(int i);
+
 int main() {
     create_file(MAGIC);
-    hFile = fopen("disk_SOK.txt","a+");
+   //hFile = fopen("disk_SOK.txt","a+");
     fileInf* file = init_struct(FREE,idCouner++,HEADER_SIZE* block , (MAX_SIZE - HEADER_SIZE)*block);
     header.push_back(file);
     while(make_magic(printf_menu()));
-    fclose(hFile);
+    //fclose(hFile);
     return 0;
 }
+
+
+/* ********************************** FUN DEFINITION **************************************************** */
 
 int printf_menu(){
     //system("cls");
@@ -142,7 +151,7 @@ void defragmintaiton() {
     vector<vector<fileInf*>> vect;
     for(fileInf * file : header){
         if(file->stat == BUSY_HEAD){
-            vect.push_back(get_ful_file(file->id));
+            vect.push_back(get_full_file(file->id));
         }
     }
     char buf[(MAX_SIZE - HEADER_SIZE) * block + 1];
@@ -153,26 +162,81 @@ void defragmintaiton() {
         int size = get_ful_file_size(&files);
         string file_inf = get_file_inf(buf,&files); //CHEAK THIS FUNCTION!!!
         delete_file(files[i]->id);
-        move_all_files(offset,size,next_id_psevdo++);
+        switch (move_all_files(offset,size,next_id_psevdo++)){
+            case 0 :  create_new_file(file_inf); break;
+            default : exit(10);
+        }
         offset += size;
     }
 }
 
-void move_all_files(int offset, int size, int i) {
-    int s = header.size() - 1;
-    int base = HEADER_SIZE * block;
-    do{
-        if(header[s]->stat == FREE){
-            continue;
-        }else{
+fileInf * free_zone;
 
-        }
-        if(s == 0) {
-            break;
+int move_all_files(int offset, int size, int i) {
+    do {
+        if (header[i - 1]->size >= size) {
+            return 0;
+        } else {
+            vector<fileInf *> befor;
+            befor = find_secret_and_do_magic(i);
+            if(free_zone->size == 0){
+                cheack_and_clear_header();
+                befor = find_secret_and_do_magic(i);
+            }
+            if (free_zone->size != 0) {
+                header[i-1]->size += 1;
+                push(befor);
+            }
         }
     }while(true);
 }
 
+vector<fileInf *> find_secret_and_do_magic(int i) {
+    vector<fileInf*> vec;
+    for(fileInf * f : header){
+        if(vec.empty()) {
+            if (f->stat != FREE) {
+                i--;
+                if(i==0) {
+                    vec.push_back(f);
+                }else{
+                    continue;
+                }
+            }
+        }else{
+            if(f->stat == FREE){
+                free_zone = f;
+                return vec;
+            }else{
+                vec.push_back(f);
+            }
+        }
+    }
+    return vec;
+}
+
+void push(vector<fileInf *> vec){
+    char buffer = '\0';
+    char buffer_after;
+    char buf[free_zone->pos - vec[0]->pos +2];
+    buf[free_zone->pos - vec[0]->pos + 1] = buffer;
+    int j;
+    SetFilePointer(File,vec[0]->pos,0,FILE_BEGIN);
+    ReadFile(File, buf,free_zone->pos - vec[0]->pos +1, reinterpret_cast<LPDWORD>(&j), NULL);
+    buffer = buf[0];
+    for(int i = 0; i < free_zone->pos - vec[0]->pos ; i++){
+        buffer_after = buf[i+1];
+        buf[i + 1] = buffer;
+        buffer = buffer_after;
+    }
+    SetFilePointer(File,vec[0]->pos,0,FILE_BEGIN);
+    WriteFile(File, buf,free_zone->pos - vec[0]->pos +1, reinterpret_cast<LPDWORD>(&j), NULL);
+    for(fileInf * e : vec){
+        e->pos+= 1;
+    }
+    free_zone->size-=1;
+    free_zone->pos+=1;
+}
 
 //CHEAK THIS FUNCTION!!! is return value is correct?!
 string get_file_inf(char * buf, vector<fileInf*> *vec) {
@@ -198,23 +262,24 @@ int get_ful_file_size( vector<fileInf *> * vec){
 
 void refresh_file_inf() {
     int rewrite_id;
-    printf_file_description_hader();
+    printf_file_description_hader(PRINTF_ONLI_HEAD);
     cout << "enter id of file that you want to rewrite : ";
     cin >> rewrite_id;
     see_file_inf(rewrite_id);
+    delete_file(rewrite_id);
     create_new_file();
 }
 
 void see_file_inf(int ress) {
     int res;
     if( ress == 0) {
-        printf_file_description_hader();
+        printf_file_description_hader(PRINTF_ONLI_HEAD);
         cout << "enter file id : ";
         cin >> res;
     }else{
         res = ress;
     }
-    vector<fileInf*> vec = get_ful_file(res);
+    vector<fileInf*> vec = get_full_file(res);
     if(vec.empty()){
         cout<<"sorry no such file"<<endl;
         return;
@@ -233,9 +298,10 @@ void see_file_inf(int ress) {
     }
 }
 
-vector<fileInf *> get_ful_file(int res) {
+vector<fileInf *> get_full_file(int res) {
     vector<fileInf*> vec;
-    fileInf * file = find_file(res);
+    fileInf * file;
+    file = find_file(res, CHEAK_FILE_HEAD);
     if(file == nullptr){
         return vec;
     }else{
@@ -282,17 +348,17 @@ void delete_file(int res) {
             if(file->nextId== 0){
                 break;
             }else{
-                file->nextId = 0;
+                fileInf * temp = file;
                 file = find_file(file->nextId);
+                temp->nextId = 0;
             }
         }while(true);
 
     }
-    cheack_and_clear_header();
+   cheack_and_clear_header();
 }
 
 void cheack_and_clear_header() {
-    int count = header.size() ;
     int i = 0;
     do{
         if(header[i]->stat == FREE && header[i+1]->stat== FREE){
@@ -301,11 +367,14 @@ void cheack_and_clear_header() {
             delete_ziro_element();
         }else{
             i++;
-            if(i == count){
+            if(i == header.size() - 1 ){
                 break;
             }else{
                 continue;
             }
+        }
+        if(i == header.size() -1){
+            break;
         }
     }while(true);
 }
@@ -320,14 +389,15 @@ void delete_ziro_element() {
             i++;
             continue;
         }
-    }while(i == header.size());
+        i++;
+    }while(i != header.size());
     header = temp;
 }
 
-fileInf *find_file(unsigned int id) {
+fileInf *find_file(unsigned int id, bool fl ) {
     fileInf* f = nullptr;
     for( fileInf* file : header){
-        if(file->id == id){
+        if(file->id == id && (fl || file->stat==BUSY_HEAD)){
             f= file;
             break;
         }
@@ -335,10 +405,11 @@ fileInf *find_file(unsigned int id) {
     return f;
 }
 
-void printf_file_description_hader() {
+void printf_file_description_hader(bool f) {
     cout<<"file list:"<<endl;
     for( fileInf* file : header){
         if(file->stat != FREE) {
+            if(file->stat == BUSY && f){ continue; }
             if (file->nextId == 0) {
                 cout << file->id << endl;
             } else {
@@ -421,9 +492,13 @@ bool enought_space(unsigned int size) {
     return false;
 }
 
-void create_new_file(int id){
+void create_new_file(string str){
     string file_inf;
-    file_inf = enter_file_inf();
+    if(str.empty()) {
+        file_inf = enter_file_inf();
+    }else{
+        file_inf = str;
+    }
     if(file_inf.empty()){
         return;
     }else{
@@ -434,7 +509,6 @@ void create_new_file(int id){
         }else{
             int i =0;
             int res;
-            size_t ss;
             for(auto element : file){
                 //res = ftell(hFile);
                 auto v = SetFilePointer(File,element->pos,0,FILE_BEGIN);
@@ -469,4 +543,3 @@ string enter_file_inf() {
     }
     return str;
 }
-
