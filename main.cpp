@@ -552,7 +552,7 @@ void create_new_file(string str){
                     cout<<"error"<<endl;
                     return ;
                 }
-                string sub = file_inf.substr(i, i + element->size);
+                string sub = file_inf.substr(i,element->size);
                 WriteFile(File, sub.c_str(), sub.size(), reinterpret_cast<LPDWORD>(&res), NULL);
                 i+=element->size;
             }
