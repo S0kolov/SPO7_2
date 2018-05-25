@@ -22,15 +22,15 @@ struct fileInf{
     status stat;
 };
 
+fileInf * end_struct_fo_registr;
+
 #define block sizeof(fileInf)
 
-vector <fileInf*> header;
+vector<fileInf*> header;
 
 unsigned int idCouner = 1;
 
 HANDLE File;
-
-FILE * hFile;
 
 unsigned int MAX_SIZE;
 
@@ -38,12 +38,17 @@ unsigned int HEADER_SIZE;
 
 void create_file(unsigned int max_size){
     MAX_SIZE = max_size;
-    HEADER_SIZE = (max_size/DEVIDER);
+    HEADER_SIZE = (max_size/DEVIDER) + 1;
+    int j;
     File = CreateFile("disk_SOK.txt",GENERIC_READ|GENERIC_WRITE,0,0,CREATE_ALWAYS,0,0);
-    if (File != INVALID_HANDLE_VALUE)
-        CreateFileMapping(File,0,PAGE_READWRITE,0,MAX_SIZE * sizeof(fileInf),0);
-    else
+    if (File != INVALID_HANDLE_VALUE) {
+        CreateFileMapping(File, 0, PAGE_READWRITE, 0, MAX_SIZE * sizeof(fileInf), 0);
+        SetFilePointer(File,0,0,FILE_BEGIN);
+        WriteFile(File, end_struct_fo_registr, sizeof(fileInf), reinterpret_cast<LPDWORD>(&j), NULL);
+    }
+    else {
         exit(-1);
+    }
 }
 
 fileInf* init_struct (status stat,unsigned int id, unsigned int pos, unsigned int size, fileInf* file = nullptr, unsigned int nextId = 0){
@@ -102,14 +107,57 @@ void push(vector<fileInf *> vec);
 
 vector<fileInf *> find_secret_and_do_magic(int i);
 
+void load_disk();
+
+bool try_open_file(unsigned int i);
+
 int main() {
-    create_file(MAGIC);
-   //hFile = fopen("disk_SOK.txt","a+");
-    fileInf* file = init_struct(FREE,idCouner++,HEADER_SIZE* block , (MAX_SIZE - HEADER_SIZE)*block);
-    header.push_back(file);
+    end_struct_fo_registr = init_struct(BUSY,0,-1,0);
+    if(!try_open_file(MAGIC)){
+        fileInf* file = init_struct(FREE,idCouner++,HEADER_SIZE* block , (MAX_SIZE - HEADER_SIZE)*block);
+        header.push_back(file);
+    }
     while(make_magic(printf_menu()));
-    //fclose(hFile);
     return 0;
+}
+
+bool try_open_file(unsigned int max_size) {
+    MAX_SIZE = max_size;
+    bool res = true;
+    HEADER_SIZE = (max_size/DEVIDER) + 1;
+    int j;
+    File = CreateFile("disk_SOK.txt",
+                      GENERIC_READ|GENERIC_WRITE,
+                      FILE_SHARE_READ,       // share for reading
+                      NULL,                  // default security
+                      OPEN_EXISTING,         // existing file only
+                      FILE_ATTRIBUTE_NORMAL, // normal file
+                      NULL);
+    if (File != INVALID_HANDLE_VALUE) {
+        load_disk();
+    }
+    else {
+        //cout<<GetLastError()<<endl;
+        res =false;
+        create_file(max_size);
+    }
+    return res;
+}
+
+void load_disk() {
+    int j;
+    fileInf * str;
+    SetFilePointer(File,0,0,FILE_BEGIN);
+    do{
+        str = new fileInf();
+        ReadFile(File, str, sizeof(fileInf), reinterpret_cast<LPDWORD>(&j), NULL);
+        if(str->pos == end_struct_fo_registr->pos && str->size == end_struct_fo_registr->size){
+            break;
+        }else{
+            header.push_back(str);
+        }
+    }while(true);
+    idCouner = header[header.size()-1]->id + 1;
 }
 
 
@@ -180,7 +228,7 @@ int move_all_files(int offset, int size, int i) {
             vector<fileInf *> befor;
             befor = find_secret_and_do_magic(i);
             if(free_zone->size == 0){
-                cheack_and_clear_header();
+                delete_ziro_element();
                 befor = find_secret_and_do_magic(i);
             }
             if (free_zone->size != 0) {
@@ -440,23 +488,8 @@ vector<fileInf*> create_segmentation_file(unsigned int size){
 }
 
 fileInf * find_free_pos(int *size) {
-
     for(auto element : header){
         if(element->stat == FREE){
-//            if(element->size > (*size%block > 0)? *size/block +1 : *size/block){
-//                fileInf* pice = init_struct(FREE,
-//                                            idCouner++,
-//                                            element->pos + (*size%block > 0)? *size/block +1 : *size/block,
-//                                            element->size - (*size%block > 0)? *size/block +1 : *size/block);
-//                header.push_back(pice);
-//                element->size-= (*size%block > 0)? *size/block +1 : *size/block;
-//                element->stat=BUSY;
-//                return element;
-//            }else{
-//                *size -= element->size * block;
-//                element->stat = BUSY;
-//                return element;
-//            }
             if(element->size > *size){
                 fileInf* pice = init_struct(FREE,
                                             idCouner++,
@@ -493,6 +526,10 @@ bool enought_space(unsigned int size) {
 }
 
 void create_new_file(string str){
+    if(header.size() == MAGIC/DEVIDER){
+        cout<<"sorry no space in header"<<endl;
+        return;
+    }
     string file_inf;
     if(str.empty()) {
         file_inf = enter_file_inf();
@@ -510,21 +547,25 @@ void create_new_file(string str){
             int i =0;
             int res;
             for(auto element : file){
-                //res = ftell(hFile);
                 auto v = SetFilePointer(File,element->pos,0,FILE_BEGIN);
                 if(v == INVALID_SET_FILE_POINTER){
                     cout<<"error"<<endl;
                     return ;
                 }
-                //res =fseek(hFile, element->pos , SEEK_SET);
-                string sub =file_inf.substr(i, i + element->size);
-                //i+= element->size;
+                string sub = file_inf.substr(i, i + element->size);
                 WriteFile(File, sub.c_str(), sub.size(), reinterpret_cast<LPDWORD>(&res), NULL);
-                //ss = fwrite(sub.c_str(), sizeof(char), sub.size(), hFile);
-
+                i+=element->size;
             }
         }
     }
+
+    header.push_back(end_struct_fo_registr);
+    SetFilePointer(File,0,0,FILE_BEGIN);
+    int j;
+    for(fileInf * f: header){
+        WriteFile(File, f, sizeof(fileInf), reinterpret_cast<LPDWORD>(&j), NULL);
+    }
+    header.pop_back();
 }
 
 string enter_file_inf() {
